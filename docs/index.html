@@ -1,1 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>✈️ Flight On-Time Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+      padding: 2rem;
+      text-align: center;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    header h1 { font-size: 2rem; letter-spacing: 0.05em; }
+    header p  { color: #94a3b8; margin-top: 0.4rem; font-size: 0.95rem; }
+
+    .search-bar {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      padding: 2rem 1rem 1rem;
+    }
+
+    .search-bar input {
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #e2e8f0;
+      font-size: 1.1rem;
+      width: 220px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .search-bar input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+
+    .search-bar button {
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .search-bar button:hover { background: #2563eb; }
+    .search-bar button:disabled { background: #475569; cursor: not-allowed; }
+
+    .summary-card {
+      max-width: 760px;
+      margin: 1.5rem auto 0;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      border: 1px solid #334155;
+    }
+
+    .summary-card .stat { text-align: center; flex: 1; }
+    .summary-card .stat .value { font-size: 1.5rem; font-weight: 700; color: #38bdf8; }
+    .summary-card .stat .label { font-size: 0.8rem; color: #94a3b8; margin-top: 0.2rem; }
+
+    .table-wrap {
+      max-width: 900px;
+      margin: 1.5rem auto 3rem;
+      overflow-x: auto;
+      padding: 0 1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #1e293b;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #334155;
+    }
+
+    thead tr { background: #0f172a; }
+
+    th {
+      padding: 0.85rem 1rem;
+      text-align: left;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+    }
+
+    td {
+      padding: 0.85rem 1rem;
+      font-size: 0.9rem;
+      border-top: 1px solid #0f172a;
+    }
+
+    tr:hover td { background: #263352; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge-green { background: #14532d; color: #4ade80; }
+    .badge-red   { background: #450a0a; color: #f87171; }
+    .badge-gray  { background: #1e293b; color: #94a3b8; }
+
+    .prob-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: #334155;
+      margin-top: 4px;
+      width: 80px;
+    }
+    .prob-fill { height: 100%; border-radius: 3px; background: #3b82f6; }
+
+    #status {
+      text-align: center;
+      padding: 1rem;
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2px solid #334155;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .note {
+      text-align: center;
+      color: #64748b;
+      font-size: 0.78rem;
+      padding: 0 1rem 2rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>✈️ Flight On-Time Tracker</h1>
+  <p>Last 10 departure history powered by OpenSky Network + ML prediction</p>
+</header>
+
+<div class="search-bar">
+  <input id="callsignInput" type="text" placeholder="e.g. SQ285" maxlength="8" />
+  <button id="searchBtn" onclick="search()">Search</button>
+</div>
+
+<div id="status"></div>
+<div id="summary"></div>
+<div id="results"></div>
+
+<p class="note">
+  Data sourced from OpenSky Network
+  · On-time = within ±15 min of inferred scheduled departure
+  · ML predictions use Random Forest trained on historical patterns
+</p>
+
+<script>
+  // Replace this with your Render.com URL after deploying the backend
+  const API_BASE = "https://YOUR-APP-NAME.onrender.com";
+
+  const input   = document.getElementById("callsignInput");
+  const btn     = document.getElementById("searchBtn");
+  const status  = document.getElementById("status");
+  const summary = document.getElementById("summary");
+  const results = document.getElementById("results");
+
+  input.addEventListener("keydown", e => { if (e.key === "Enter") search(); });
+
+  function setStatus(msg, loading = false) {
+    status.innerHTML = loading
+      ? `<span class="spinner"></span>${msg}`
+      : msg;
+  }
+
+  async function search() {
+    const callsign = input.value.trim().toUpperCase();
+    if (!callsign) return;
+
+    btn.disabled = true;
+    summary.innerHTML = "";
+    results.innerHTML = "";
+    setStatus(`Fetching history for <strong>${callsign}</strong> from OpenSky...`, true);
+
+    try {
+      const resp = await fetch(`${API_BASE}/flight/${callsign}?days=60`);
+      if (!resp.ok) {
+        const err = await resp.json();
+        setStatus(`❌ ${err.detail || "Not found"}`);
+        return;
+      }
+
+      const data = await resp.json();
+      setStatus("");
+      renderSummary(data);
+      renderTable(data.flights);
+
+    } catch (e) {
+      setStatus(`❌ Could not reach API. Is the backend running? (${e.message})`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderSummary(data) {
+    summary.innerHTML = `
+      <div class="summary-card">
+        <div class="stat">
+          <div class="value">${data.callsign}</div>
+          <div class="label">Flight</div>
+        </div>
+        <div class="stat">
+          <div class="value">${data.on_time_rate}</div>
+          <div class="label">On-Time Rate (last 10)</div>
+        </div>
+        <div class="stat">
+          <div class="value">${data.inferred_scheduled_utc || "N/A"}</div>
+          <div class="label">Inferred Scheduled Dep.</div>
+        </div>
+        <div class="stat">
+          <div class="value">${data.total_records}</div>
+          <div class="label">Total Records Found</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderTable(flights) {
+    if (!flights.length) {
+      results.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:2rem">No records to display.</p>`;
+      return;
+    }
+
+    const rows = flights.map(f => {
+      const badge = f.on_time === 1
+        ? `<span class="badge badge-green">✅ On Time</span>`
+        : f.on_time === 0
+          ? `<span class="badge badge-red">⚠️ Delayed</span>`
+          : `<span class="badge badge-gray">Unknown</span>`;
+
+      const delay = f.delay_minutes != null
+        ? (f.delay_minutes > 0 ? `+${f.delay_minutes} min` : `${f.delay_minutes} min`)
+        : "—";
+
+      const prob = f.prediction?.on_time_probability;
+      const probCell = prob != null
+        ? `${(prob * 100).toFixed(0)}%
+           <div class="prob-bar"><div class="prob-fill" style="width:${prob*100}%"></div></div>`
+        : "—";
+
+      return `
+        <tr>
+          <td>${f.departure_date || "—"}</td>
+          <td>${f.day_of_week_name || "—"}</td>
+          <td>${f.departure_time_utc || "—"} UTC</td>
+          <td>${f.departure_airport || "—"}</td>
+          <td>${delay}</td>
+          <td>${badge}</td>
+          <td>${probCell}</td>
+          <td>${f.flight_duration_minutes ? f.flight_duration_minutes + " min" : "—"}</td>
+        </tr>
+      `;
+    }).join("");
+
+    results.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Day</th>
+              <th>Actual Dep.</th>
+              <th>From</th>
+              <th>Delay (proxy)</th>
+              <th>Status</th>
+              <th>ML On-Time Prob.</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+</script>
+
+</body>
+</html>
 
